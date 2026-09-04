@@ -1,0 +1,182 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+/* Cabinet Grotesk fallback → Space Grotesk. Realistic pairing. */
+
+:root {
+    --font-heading: "Space Grotesk", "Cabinet Grotesk", ui-sans-serif, system-ui;
+    --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system;
+    --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+@layer base {
+    :root {
+        /* Light: Exec Swiss Brutalist */
+        --background: 210 20% 98%;
+        --foreground: 220 39% 11%;
+        --card: 0 0% 100%;
+        --card-foreground: 220 39% 11%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 220 39% 11%;
+        --primary: 221 83% 53%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 220 14% 96%;
+        --secondary-foreground: 220 39% 11%;
+        --muted: 220 14% 96%;
+        --muted-foreground: 220 9% 46%;
+        --accent: 221 83% 96%;
+        --accent-foreground: 221 83% 30%;
+        --destructive: 0 84% 60%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 220 13% 91%;
+        --input: 220 13% 91%;
+        --ring: 221 83% 53%;
+        --success: 158 64% 42%;
+        --warning: 38 92% 50%;
+        --danger: 0 84% 60%;
+        --chart-1: 221 83% 53%;
+        --chart-2: 158 64% 42%;
+        --chart-3: 38 92% 50%;
+        --chart-4: 262 68% 55%;
+        --chart-5: 0 84% 60%;
+        --radius: 0.5rem;
+    }
+
+    .dark {
+        /* Dark: SOC/Ops Retro-Futurism */
+        --background: 240 6% 6%;
+        --foreground: 0 0% 98%;
+        --card: 240 5% 8%;
+        --card-foreground: 0 0% 98%;
+        --popover: 240 5% 8%;
+        --popover-foreground: 0 0% 98%;
+        --primary: 217 91% 60%;
+        --primary-foreground: 240 6% 6%;
+        --secondary: 240 4% 14%;
+        --secondary-foreground: 0 0% 98%;
+        --muted: 240 4% 14%;
+        --muted-foreground: 240 5% 65%;
+        --accent: 217 91% 20%;
+        --accent-foreground: 217 91% 80%;
+        --destructive: 0 72% 51%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 240 4% 18%;
+        --input: 240 4% 18%;
+        --ring: 217 91% 60%;
+        --success: 158 64% 52%;
+        --warning: 38 92% 55%;
+        --danger: 0 72% 60%;
+        --chart-1: 217 91% 60%;
+        --chart-2: 158 64% 52%;
+        --chart-3: 38 92% 55%;
+        --chart-4: 268 83% 68%;
+        --chart-5: 340 82% 62%;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    html,
+    body {
+        @apply bg-background text-foreground;
+        font-family: var(--font-body);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        font-family: var(--font-heading);
+        letter-spacing: -0.02em;
+    }
+    code,
+    pre,
+    .font-mono {
+        font-family: var(--font-mono);
+    }
+}
+
+/* Selection */
+::selection {
+    background: hsl(var(--primary) / 0.25);
+    color: hsl(var(--foreground));
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Grid backdrop for dark hero */
+.grid-backdrop {
+    background-image:
+        linear-gradient(hsl(var(--border) / 0.4) 1px, transparent 1px),
+        linear-gradient(90deg, hsl(var(--border) / 0.4) 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-position: -1px -1px;
+}
+
+/* Glow ring for AI panel */
+.ai-glow {
+    position: relative;
+    overflow: hidden;
+}
+.ai-glow::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    padding: 1px;
+    border-radius: inherit;
+    background: conic-gradient(
+        from 0deg,
+        hsl(var(--primary) / 0.6),
+        hsl(var(--chart-4) / 0.5),
+        hsl(var(--chart-2) / 0.5),
+        hsl(var(--primary) / 0.6)
+    );
+    -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: aiSpin 8s linear infinite;
+    pointer-events: none;
+}
+@keyframes aiSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* KPI number tabular alignment */
+.tabular {
+    font-variant-numeric: tabular-nums;
+}
+
+.count-up {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Persona chip accent bar */
+.persona-bar {
+    box-shadow: inset 3px 0 0 hsl(var(--primary));
+}
