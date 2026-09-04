@@ -1658,11 +1658,11 @@ def _qbr_alerts(prs, brand, qbr):
               for i, m in enumerate(months)]
     peak = max(totals, key=lambda t: t[1]) if totals else ("—", 0)
     mttrm = (qbr or {}).get("mttr_by_month") or []
-    avg_mttr = round(sum(x["value"] for x in mttrm) / len(mttrm), 1) if mttrm else None
+    avg_mttr = (qbr or {}).get("mttr_median_hours")
     facts = [
         (f"{peak[1]:,}", f"alerts in {peak[0]} — the period peak."),
         (f"{(qbr or {}).get('total', 0):,}", "total incidents across the period."),
-        (_vs(avg_mttr, suffix=" h"), "average mean time to resolve."),
+        (_vs(avg_mttr, suffix=" h"), "median time to resolve (outlier-robust)."),
     ]
     for i, (big, lbl) in enumerate(facts):
         yy = 2.5 + i * 1.25

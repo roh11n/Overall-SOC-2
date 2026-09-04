@@ -249,6 +249,19 @@ def _avg(values: List[float]) -> float:
     return round(sum(vals) / len(vals), 1)
 
 
+def _median(values: List[float]) -> float:
+    """Robust central value for time metrics (MTTR/MTTD/MTTA). The plain mean
+    is dominated by a small tail of extreme outliers — incidents whose event
+    time predates detection by weeks, or that stay open for days — so we report
+    the median, which reflects the typical incident."""
+    vals = sorted(v for v in values if v is not None and v >= 0)
+    n = len(vals)
+    if n == 0: return 0.0
+    mid = n // 2
+    if n % 2: return float(vals[mid])
+    return (vals[mid - 1] + vals[mid]) / 2.0
+
+
 def _pct(num: int, den: int) -> float:
     if den <= 0: return 0.0
     return round(100.0 * num / den, 1)
@@ -289,9 +302,13 @@ async def compute_soc_manager(db, tenant_id: str) -> Dict[str, Any]:
     tp = sum(1 for r in rows if r.get("close_reason") and "true" in r["close_reason"].lower())
     sla_breached = sum(1 for r in rows if r.get("sla_breached") is True)
 
-    mttr_hours = round(_avg([r.get("mttr_sec") for r in rows]) / 3600.0, 2)
-    mttd_min = round(_avg([r.get("mttd_sec") for r in rows]) / 60.0, 1)
-    mtta_min = round(_avg([r.get("mtta_sec") for r in rows]) / 60.0, 1)
+    # MTTR/MTTD/MTTA use the median (robust) — the arithmetic mean is skewed
+    # by a small tail of extreme-duration incidents. Means kept for reference.
+    mttr_hours = round(_median([r.get("mttr_sec") for r in rows]) / 3600.0, 2)
+    mttd_min = round(_median([r.get("mttd_sec") for r in rows]) / 60.0, 1)
+    mtta_min = round(_median([r.get("mtta_sec") for r in rows]) / 60.0, 1)
+    mttr_mean_hours = round(_avg([r.get("mttr_sec") for r in rows]) / 3600.0, 2)
+    mttd_mean_min = round(_avg([r.get("mttd_sec") for r in rows]) / 60.0, 1)
     time_taken_min = round(_avg([r.get("time_taken_sec") for r in rows]) / 60.0, 1)
     open_duration_h = round(_avg([r.get("open_duration_sec") for r in rows if (r.get("status") or "").lower() != "closed"]) / 3600.0, 1)
 
@@ -375,6 +392,8 @@ async def compute_soc_manager(db, tenant_id: str) -> Dict[str, Any]:
             "mttr_hours": mttr_hours,
             "mttd_minutes": mttd_min,
             "mtta_minutes": mtta_min,
+            "mttr_mean_hours": mttr_mean_hours,
+            "mttd_mean_minutes": mttd_mean_min,
             "avg_time_taken_min": time_taken_min,
             "backlog_open": open_now,
             "backlog_aging_hours": open_duration_h,
@@ -786,7 +805,7 @@ async def compute_qbr(db, tenant_id: str) -> Dict[str, Any]:
         "series": {s: [month_sev[m].get(s, 0) for m in ordered] for s in sev_order},
     }
     mttr_by_month = [
-        {"month": m, "value": round(sum(month_mttr.get(m, [])) / len(month_mttr[m]) / 60.0, 1)}
+        {"month": m, "value": round(_median(month_mttr.get(m, [])) / 3600.0, 1)}
         for m in ordered if month_mttr.get(m)
     ]
 
@@ -794,11 +813,16 @@ async def compute_qbr(db, tenant_id: str) -> Dict[str, Any]:
     tc: Counter = Counter(r.get("mitre_tactic") for r in rows if r.get("mitre_tactic"))
     tactics = [{"tactic": (k or "")[:28], "count": v} for k, v in tc.most_common(12)]
 
+    mttr_median_hours = round(_median([r.get("mttr_sec") for r in rows]) / 3600.0, 1)
+    mttd_median_min = round(_median([r.get("mttd_sec") for r in rows]) / 60.0, 1)
+
     return {
         "data_status": "live",
         "total": total,
         "log_sources": log_sources,
         "alerts_by_month": alerts_by_month,
         "mttr_by_month": mttr_by_month,
+        "mttr_median_hours": mttr_median_hours,
+        "mttd_median_min": mttd_median_min,
         "tactics": tactics,
     }
