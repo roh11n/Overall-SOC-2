@@ -118,6 +118,10 @@ def parse_rows(contents: bytes, filename: str) -> List[Dict[str, Any]]:
         df = pd.read_excel(io.BytesIO(contents))
 
     df.columns = [_norm_col(c) for c in df.columns]
+    # Drop duplicate normalized columns (keep first) so row.get(col) always
+    # returns a scalar — duplicate labels otherwise return a Series and break
+    # boolean/date handling (ValueError: truth value of a Series is ambiguous).
+    df = df.loc[:, ~pd.Index(df.columns).duplicated(keep="first")]
 
     rows: List[Dict[str, Any]] = []
     for _, r in df.iterrows():

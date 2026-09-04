@@ -61,6 +61,8 @@ export default function UploadModal({ open, onOpenChange }) {
         const bound = boundMap[source] ?? 0;
         if (bound > 0) {
           toast.success(`Ingested ${bound} rows into ${labelMap[source]} for ${tName}`);
+        } else if (data.error) {
+          toast.error(data.error);
         } else {
           toast.error(
             `0 rows matched the expected columns — nothing was added. Check your file's headers.`
@@ -191,6 +193,9 @@ export default function UploadModal({ open, onOpenChange }) {
                   <div>Bound to dashboard: <span className="text-foreground font-medium" data-testid="upload-bound-rows">{result.bound_rows} rows → {result.dashboard}</span></div>
                 )}
                 <div>Detected columns: {result.columns?.slice(0, 6).join(", ")}{result.columns?.length > 6 ? "…" : ""}</div>
+                {result.error && (
+                  <div className="text-red-600 pt-1" data-testid="upload-error">{result.error}</div>
+                )}
                 {result.warning && (
                   <div className="text-amber-600 pt-1" data-testid="upload-warning">{result.warning}</div>
                 )}

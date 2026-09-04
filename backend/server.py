@@ -611,8 +611,17 @@ async def upload_data(source: str, tenant_id: str = "all", file: UploadFile = Fi
             "QRadar files are stored but do not populate dashboards yet. "
             "Upload an XSOAR or Threat Intel export to see live data."
         )
-    if source in {"xsoar", "threat_intel", "rules", "log_validation"} and record["bound_rows"] == 0 \
-            and not any(record.get(k) for k in ("ti_ingest_error", "xsoar_ingest_error", "rules_ingest_error", "logval_ingest_error")):
+    # If parsing raised, surface a concrete reason instead of a silent 0 rows.
+    _ingest_err = next((record.get(k) for k in (
+        "xsoar_ingest_error", "ti_ingest_error",
+        "rules_ingest_error", "logval_ingest_error") if record.get(k)), None)
+    if source in {"xsoar", "threat_intel", "rules", "log_validation"} and record["bound_rows"] == 0 and _ingest_err:
+        record["error"] = f"Could not read this file: {_ingest_err}"
+        record["warning"] = (
+            "The file could not be parsed, so nothing was added to the dashboard. "
+            "Please check the file format and try again."
+        )
+    elif source in {"xsoar", "threat_intel", "rules", "log_validation"} and record["bound_rows"] == 0:
         record["warning"] = (
             "0 rows matched the expected columns — nothing was added to the dashboard. "
             "Check that your file's column headers match the expected format."
