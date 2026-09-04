@@ -436,6 +436,7 @@ async def dashboard_det(period: str = "monthly", tenant_id: str = "all", user=De
         det["mitre_heatmap"] = overlay["mitre_heatmap"]
         det["rules"] = overlay["rules"]
         det["quality"]["mitre_coverage"] = overlay["mitre_coverage"]
+        det["quality"]["detection_coverage"] = overlay["mitre_coverage"]
         det["gap_analysis"]["techniques_covered"] = overlay["techniques_covered"]
 
     if has_logval:

@@ -115,7 +115,7 @@ export default function SocManagerDashboard() {
             <KpiCard label="Closed" value={data.summary.closed.toLocaleString()} icon={CheckCircle2} testid="kpi-closed" />
             <KpiCard label="Open Backlog" value={data.summary.backlog_open.toLocaleString()} icon={Layers} intent="negative" testid="kpi-open" />
             <KpiCard label="MTTR" value={data.summary.mttr_hours} suffix="h" icon={Timer} intent="negative" testid="kpi-mttr" />
-            <KpiCard label="MTTA" value={data.summary.mtta_minutes} suffix="m" icon={Timer} intent="negative" testid="kpi-mtta" />
+            <KpiCard label="MTTD" value={data.summary.mttd_minutes} suffix="m" icon={Timer} intent="negative" testid="kpi-mttd" />
             <KpiCard label="SLA Compliance" value={data.summary.sla_compliance_pct} suffix="%" testid="kpi-sla" />
             <KpiCard label="False Positive Rate" value={data.summary.false_positive_rate} suffix="%" icon={XCircle} intent="negative" testid="kpi-fp" />
             <KpiCard label="True Positive Rate" value={data.summary.true_positive_rate} suffix="%" icon={CheckCircle2} testid="kpi-tp" />

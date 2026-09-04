@@ -168,11 +168,20 @@ async def compute_detection(db, tenant_id: str, xsoar_rows: List[Dict]) -> Dict[
                 tc[tech] += 1
 
     max_rules = max(tactic_rules.values()) if tactic_rules else 1
+
+    # Live technique activity from XSOAR incidents → dynamic heat-map hit counts
+    # (previously "hits" was a static count of catalog rules per technique).
+    live_tech_hits = Counter()
+    for x in xsoar_rows or []:
+        tech = x.get("mitre_technique")
+        if tech:
+            live_tech_hits[_norm_key(_tech_name(tech))] += 1
+
     heatmap = []
     for t in MITRE_TACTICS:
         if t in tactic_rules:
-            techs = [{"name": n, "covered": True, "hits": h}
-                     for n, h in tactic_techs.get(t, Counter()).most_common(8)]
+            techs = [{"name": n, "covered": True, "hits": live_tech_hits.get(_norm_key(n), 0)}
+                     for n, _ in tactic_techs.get(t, Counter()).most_common(8)]
             heatmap.append({"tactic": t, "coverage": round(100.0 * tactic_rules[t] / max_rules),
                             "techniques": techs})
     distinct_tactics = sum(1 for t in MITRE_TACTICS if t in tactic_rules)

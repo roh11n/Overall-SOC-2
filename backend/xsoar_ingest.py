@@ -31,6 +31,11 @@ _CANONICAL_COLS = {
     "status": "status", "owner": "owner",
     "playbookid": "playbook_id", "playbook id": "playbook_id",
     "occurred": "occurred", "closed": "closed", "closereason": "close_reason",
+    "created": "created", "created date": "created", "created time": "created",
+    "creation date": "created", "incident created date": "created",
+    "detected": "detected", "detected date": "detected",
+    "detection date": "detected", "detection time": "detected",
+    "final severity": "final_severity", "initial severity": "initial_severity",
     "close reason": "close_reason", "closenotes": "close_notes",
     "actual time taken": "time_taken_sec",
     "ticket number": "ticket_number", "ticket opened date": "ticket_opened",
@@ -116,19 +121,34 @@ def parse_rows(contents: bytes, filename: str) -> List[Dict[str, Any]]:
 
     rows: List[Dict[str, Any]] = []
     for _, r in df.iterrows():
-        occurred_iso = _parse_dt(r.get("occurred") or r.get("ticket_opened"))
+        raw_occurred = _parse_dt(r.get("occurred"))
+        raw_ticket_opened = _parse_dt(r.get("ticket_opened"))
+        occurred_iso = raw_occurred or raw_ticket_opened
         closed_iso = _parse_dt(r.get("closed") or r.get("ticket_closed"))
         ack_iso = _parse_dt(r.get("ticket_acknowledged"))
         resolved_iso = _parse_dt(r.get("ticket_resolved"))
+        # Detection/creation timestamp for MTTD (never falls back to occurred)
+        detect_iso = _parse_dt(r.get("created") or r.get("detected")) or raw_ticket_opened
 
-        # Derive MTTR seconds when we have both dates
-        mttr_sec = None
-        if occurred_iso and closed_iso:
+        # MTTR seconds — prefer the explicit "Actual Time Taken" handling-time
+        # column (real work time) over wall-clock occurred→closed, which
+        # otherwise inflates MTTR with nights/weekends the incident sat idle.
+        mttr_sec = _to_seconds(r.get("time_taken_sec"))
+        if mttr_sec is not None and mttr_sec < 0:
+            mttr_sec = None
+        if mttr_sec is None and occurred_iso and closed_iso:
             try:
                 mttr_sec = (pd.to_datetime(closed_iso) - pd.to_datetime(occurred_iso)).total_seconds()
                 if mttr_sec < 0: mttr_sec = None
             except Exception: pass
-        # MTTA seconds
+        # MTTD seconds — time from event occurrence to detection/incident creation
+        mttd_sec = None
+        if raw_occurred and detect_iso:
+            try:
+                d = (pd.to_datetime(detect_iso) - pd.to_datetime(raw_occurred)).total_seconds()
+                if d >= 0: mttd_sec = d
+            except Exception: pass
+        # MTTA seconds (kept for compatibility)
         mtta_sec = None
         if occurred_iso and ack_iso:
             try:
@@ -142,6 +162,8 @@ def parse_rows(contents: bytes, filename: str) -> List[Dict[str, Any]]:
             "type": _clean(r.get("type")),
             "severity": _clean(r.get("severity")),
             "analyst_severity": _clean(r.get("analyst_severity")),
+            "final_severity": _clean(r.get("final_severity")),
+            "initial_severity": _clean(r.get("initial_severity")),
             "status": _clean(r.get("status")),
             "owner": _clean(r.get("owner")),
             "playbook_id": _clean(r.get("playbook_id")),
@@ -151,6 +173,7 @@ def parse_rows(contents: bytes, filename: str) -> List[Dict[str, Any]]:
             "time_taken_sec": _to_seconds(r.get("time_taken_sec")),
             "open_duration_sec": _to_seconds(r.get("open_duration_sec")),
             "mttr_sec": mttr_sec,
+            "mttd_sec": mttd_sec,
             "mtta_sec": mtta_sec,
             "tenant_name": _clean(r.get("tenant_name")),
             "log_source": _clean(r.get("log_source")),
@@ -263,16 +286,23 @@ async def compute_soc_manager(db, tenant_id: str) -> Dict[str, Any]:
     sla_breached = sum(1 for r in rows if r.get("sla_breached") is True)
 
     mttr_hours = round(_avg([r.get("mttr_sec") for r in rows]) / 3600.0, 2)
+    mttd_min = round(_avg([r.get("mttd_sec") for r in rows]) / 60.0, 1)
     mtta_min = round(_avg([r.get("mtta_sec") for r in rows]) / 60.0, 1)
     time_taken_min = round(_avg([r.get("time_taken_sec") for r in rows]) / 60.0, 1)
     open_duration_h = round(_avg([r.get("open_duration_sec") for r in rows if (r.get("status") or "").lower() != "closed"]) / 3600.0, 1)
 
-    # Severity mix
-    sev_c: Counter = Counter(_severity_norm(r.get("severity")) for r in rows)
-    # Only surface the three standard buckets with data (drop grey zero / numeric / Unknown)
+    # Severity mix — read the best-available severity field and keep every
+    # standard bucket that has data (Critical was previously dropped).
+    def _sev_of(r):
+        return _severity_norm(
+            r.get("severity") or r.get("final_severity")
+            or r.get("analyst_severity") or r.get("initial_severity")
+        )
+    sev_c: Counter = Counter(_sev_of(r) for r in rows)
     severity_distribution = [
         {"severity": k, "count": sev_c.get(k, 0)}
-        for k in ("High", "Medium", "Low") if sev_c.get(k, 0) > 0
+        for k in ("Critical", "High", "Medium", "Low", "Informational")
+        if sev_c.get(k, 0) > 0
     ]
 
     # Close reason mix
@@ -339,6 +369,7 @@ async def compute_soc_manager(db, tenant_id: str) -> Dict[str, Any]:
             "sla_breach_rate": _pct(sla_breached, total),
             "sla_compliance_pct": round(100.0 - _pct(sla_breached, total), 1),
             "mttr_hours": mttr_hours,
+            "mttd_minutes": mttd_min,
             "mtta_minutes": mtta_min,
             "avg_time_taken_min": time_taken_min,
             "backlog_open": open_now,
