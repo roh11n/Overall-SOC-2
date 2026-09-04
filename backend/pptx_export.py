@@ -10,6 +10,7 @@ Rules:
 - Every content slide carries a 1-line executive insight, not a description.
 """
 import io
+import logging
 from datetime import datetime, timezone
 
 from pptx import Presentation
@@ -1741,6 +1742,16 @@ def _period_labels(period: str):
 
 def build_pptx(tenant: dict, period: str, all_data: dict,
                recommendations: list) -> io.BytesIO:
+    # Preferred: edit the client's real QBR deck as a template so layout,
+    # fonts and wording match exactly. Fall back to the native builder if the
+    # template file is missing or editing fails.
+    try:
+        import pptx_template
+        if pptx_template.template_available():
+            return pptx_template.build_from_template(tenant, period, all_data, recommendations)
+    except Exception:
+        logging.getLogger("mssp.pptx").exception("template export failed; using native builder")
+
     prs = Presentation()
     prs.slide_width = SLIDE_W
     prs.slide_height = SLIDE_H

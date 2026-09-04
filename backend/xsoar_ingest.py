@@ -775,10 +775,27 @@ async def compute_qbr(db, tenant_id: str) -> Dict[str, Any]:
             or r.get("analyst_severity") or r.get("initial_severity")
         )
 
-    # Log-source share of incidents
-    ls: Counter = Counter(r.get("log_source") for r in rows if r.get("log_source"))
+    # Log-source share of incidents. The XSOAR export often stores log_source
+    # as a JSON-array string (e.g. '["Check Point @ x","Custom Rule Engine-3"]');
+    # take the primary (first) source per incident so shares sum to ~100%.
+    def _primary_source(val):
+        if not val:
+            return None
+        s = str(val).strip()
+        if s.startswith("["):
+            try:
+                import json
+                arr = json.loads(s)
+                if isinstance(arr, list) and arr:
+                    s = str(arr[0])
+            except Exception:
+                s = s.lstrip("[").split(",")[0].strip().strip('"').strip("'")
+        return s.strip().strip('"').strip("'") or None
+
+    ls: Counter = Counter(_primary_source(r.get("log_source")) for r in rows if r.get("log_source"))
+    ls.pop(None, None)
     log_sources = [
-        {"name": (k or "")[:28], "count": v, "pct": round(100.0 * v / total, 1)}
+        {"name": (k or "")[:34], "count": v, "pct": round(100.0 * v / total, 1)}
         for k, v in ls.most_common(10)
     ]
 
@@ -816,6 +833,30 @@ async def compute_qbr(db, tenant_id: str) -> Dict[str, Any]:
     mttr_median_hours = round(_median([r.get("mttr_sec") for r in rows]) / 3600.0, 1)
     mttd_median_min = round(_median([r.get("mttd_sec") for r in rows]) / 60.0, 1)
 
+    # Distinct counts for exec tiles
+    unique_log_sources = len(ls)
+    unique_detections = len({r.get("rule_name") for r in rows if r.get("rule_name")})
+
+    # Tactic x month matrix (for the MITRE heat-map table)
+    tactic_month: Dict[str, Counter] = {}
+    for r in rows:
+        ts = _mk(r.get("occurred"))
+        tac = r.get("mitre_tactic")
+        if ts is None or not tac:
+            continue
+        tactic_month.setdefault(tac, Counter())[ts.strftime("%b %Y")] += 1
+    tac_totals = sorted(
+        ((t, sum(c.values())) for t, c in tactic_month.items()),
+        key=lambda x: -x[1],
+    )
+    table_months = ordered[-6:]
+    tactic_table = [
+        {"tactic": t,
+         "months": {m: tactic_month[t].get(m, 0) for m in table_months},
+         "total": sum(tactic_month[t].get(m, 0) for m in table_months)}
+        for t, _ in tac_totals[:14]
+    ]
+
     return {
         "data_status": "live",
         "total": total,
@@ -825,4 +866,8 @@ async def compute_qbr(db, tenant_id: str) -> Dict[str, Any]:
         "mttr_median_hours": mttr_median_hours,
         "mttd_median_min": mttd_median_min,
         "tactics": tactics,
+        "unique_log_sources": unique_log_sources,
+        "unique_detections": unique_detections,
+        "table_months": table_months,
+        "tactic_table": tactic_table,
     }
