@@ -14,6 +14,7 @@ import emailer
 import llm as llm_mod
 import pptx_export
 import recommendations
+import rules_ingest
 import tenants as tenants_mod
 import ti_ingest
 import xsoar_ingest
@@ -74,6 +75,13 @@ async def build_bundle(db, period: str, tenant_id: str):
 
     recs = recommendations.generate(all_data["executive"])
     recs = llm_mod.enrich_recommendations(recs, all_data["executive"], max_llm=2)
+
+    # Live data for the QBR-style deck (Executive + Incident Monitoring).
+    all_data["soc_live"] = await xsoar_ingest.compute_soc_manager(db, tenant_id)
+    all_data["qbr"] = await xsoar_ingest.compute_qbr(db, tenant_id)
+    all_data["ti_live"] = ti if has_ti else {"data_status": "empty"}
+    _rc = await rules_ingest.latest_upload(db, tenant_id)
+    all_data["rules_count"] = (_rc or {}).get("row_count")
     return tenant, all_data, recs
 
 

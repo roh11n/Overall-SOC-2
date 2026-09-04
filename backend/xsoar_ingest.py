@@ -734,3 +734,67 @@ async def compute_client(db, tenant_id: str) -> Dict[str, Any]:
         },
         "trends": {"sla": sla_trend, "automation": auto_trend, "coverage": [], "fp": fp_trend},
     }
+
+
+# --- QBR (quarterly business review) aggregates -------------------------
+
+async def compute_qbr(db, tenant_id: str) -> Dict[str, Any]:
+    """Aggregates for the QBR-style PPTX: log-source share, alerts-by-month x
+    severity, MITRE tactic volumes, and mean-time-to-report by month."""
+    rows = await _rows(db, tenant_id)
+    if not rows:
+        return {"data_status": "empty"}
+    total = len(rows)
+
+    def _sev(r):
+        return _severity_norm(
+            r.get("severity") or r.get("final_severity")
+            or r.get("analyst_severity") or r.get("initial_severity")
+        )
+
+    # Log-source share of incidents
+    ls: Counter = Counter(r.get("log_source") for r in rows if r.get("log_source"))
+    log_sources = [
+        {"name": (k or "")[:28], "count": v, "pct": round(100.0 * v / total, 1)}
+        for k, v in ls.most_common(10)
+    ]
+
+    # Alerts by month x severity + MTTR (minutes) by month
+    def _mk(occ):
+        try:
+            return pd.to_datetime(occ)
+        except Exception:
+            return None
+    month_sev: Dict[str, Counter] = {}
+    month_mttr: Dict[str, List[float]] = {}
+    for r in rows:
+        ts = _mk(r.get("occurred"))
+        if ts is None:
+            continue
+        key = ts.strftime("%b %Y")
+        month_sev.setdefault(key, Counter())[_sev(r)] += 1
+        if r.get("mttr_sec") is not None:
+            month_mttr.setdefault(key, []).append(r["mttr_sec"])
+    ordered = sorted(month_sev.keys(), key=lambda m: pd.to_datetime("01 " + m))
+    sev_order = ["Critical", "High", "Medium", "Low"]
+    alerts_by_month = {
+        "months": ordered,
+        "series": {s: [month_sev[m].get(s, 0) for m in ordered] for s in sev_order},
+    }
+    mttr_by_month = [
+        {"month": m, "value": round(sum(month_mttr.get(m, [])) / len(month_mttr[m]) / 60.0, 1)}
+        for m in ordered if month_mttr.get(m)
+    ]
+
+    # MITRE tactic volumes
+    tc: Counter = Counter(r.get("mitre_tactic") for r in rows if r.get("mitre_tactic"))
+    tactics = [{"tactic": (k or "")[:28], "count": v} for k, v in tc.most_common(12)]
+
+    return {
+        "data_status": "live",
+        "total": total,
+        "log_sources": log_sources,
+        "alerts_by_month": alerts_by_month,
+        "mttr_by_month": mttr_by_month,
+        "tactics": tactics,
+    }

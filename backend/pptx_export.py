@@ -61,6 +61,57 @@ AMBER = RGBColor(0xD9, 0x77, 0x06)
 ROSE = RGBColor(0xDC, 0x26, 0x26)
 GRAY = RGBColor(0x64, 0x74, 0x8B)
 
+# --- Deloitte QBR palette (teal + navy) ---------------------------------
+D_TEAL = RGBColor(0x00, 0xAB, 0xAB)
+D_TEAL_DK = RGBColor(0x00, 0x7C, 0x7C)
+D_TEAL_LT = RGBColor(0x86, 0xD8, 0xD2)
+D_NAVY = RGBColor(0x01, 0x21, 0x69)
+D_NAVY_DK = RGBColor(0x0B, 0x1F, 0x3A)
+D_SLATE = RGBColor(0x18, 0x24, 0x2C)
+D_GRAY = RGBColor(0xA9, 0xB6, 0xC2)
+D_GRAY_DK = RGBColor(0x5A, 0x62, 0x68)
+D_BG = RGBColor(0xF4, 0xF7, 0xF8)
+D_GREEN = RGBColor(0x86, 0xBC, 0x25)   # Deloitte wordmark dot
+SEV_QBR = {
+    "Critical": D_NAVY_DK,
+    "High": D_NAVY,
+    "Medium": D_TEAL,
+    "Low": D_TEAL_LT,
+    "Informational": D_GRAY,
+}
+
+
+def _wordmark(slide, x, y, *, size=20, dark=True):
+    """Deloitte wordmark: 'Deloitte' + green dot, reproduced as text."""
+    tb = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(3.0), Inches(size / 40))
+    tf = tb.text_frame
+    tf.word_wrap = False
+    tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = Emu(0)
+    p = tf.paragraphs[0]
+    r = p.add_run()
+    r.text = "Deloitte"
+    r.font.name = "Aptos Display"
+    r.font.size = Pt(size)
+    r.font.bold = True
+    r.font.color.rgb = (BG_WHITE if not dark else D_SLATE)
+    dot = p.add_run()
+    dot.text = "."
+    dot.font.name = "Aptos Display"
+    dot.font.size = Pt(size)
+    dot.font.bold = True
+    dot.font.color.rgb = D_GREEN
+    return tb
+
+
+def _vs(val, *, suffix="", na="N/A", pct=False):
+    """Format a value or fall back to N/A when missing/None."""
+    if val is None or val == "" or (isinstance(val, float) and val != val):
+        return na
+    if isinstance(val, (int, float)):
+        v = f"{val:,.0f}" if float(val).is_integer() else f"{val:,.1f}"
+        return f"{v}{'%' if pct else suffix}"
+    return f"{val}{suffix}"
+
 
 def _hex(hex_str: str) -> RGBColor:
     hex_str = (hex_str or "#1E3A8A").lstrip("#")
@@ -1356,8 +1407,337 @@ def _slide_thankyou(prs, brand):
 
 
 # ================================================================
+#  QBR-STYLE SLIDE BUILDERS (Deloitte teal/navy)
+# ================================================================
+
+def _qbr_footer(slide, brand, page_no, *, dark=False):
+    col = D_GRAY if dark else D_GRAY_DK
+    _text(slide, MARGIN_L, 7.12, 8, 0.28,
+          f"{brand['name'].upper()}  ·  {brand['period_label']}",
+          size=8, bold=True, color=col, tracking=1.5)
+    _wordmark(slide, 11.55, 7.02, size=10.5, dark=not dark)
+
+
+def _qbr_group(slide, x, y, w, title):
+    _text(slide, x, y, w, 0.28, title, size=10, bold=True, color=D_TEAL,
+          uppercase=True, tracking=2.5)
+    _hr(slide, x, y + 0.3, w, color=D_GRAY, thickness=0.5)
+
+
+def _qbr_tile(slide, x, y, w, h, big, label, *, big_color=D_NAVY):
+    card = _rect(slide, x, y, w, h, fill=BG_WHITE, border=(D_GRAY, 0.75), radius=0.06)
+    stripe = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(x), Inches(y), Inches(0.07), Inches(h))
+    _fill(stripe, D_TEAL); _no_line(stripe)
+    vtb = slide.shapes.add_textbox(Inches(x + 0.22), Inches(y + 0.16), Inches(w - 0.35), Inches(h * 0.5))
+    vtf = vtb.text_frame; vtf.word_wrap = False
+    vtf.margin_left = vtf.margin_top = Emu(0)
+    vp = vtf.paragraphs[0]
+    rv = vp.add_run(); rv.text = str(big)
+    rv.font.name = "Aptos Display"; rv.font.size = Pt(26); rv.font.bold = True
+    rv.font.color.rgb = big_color if str(big) != "N/A" else D_GRAY
+    _text(slide, x + 0.24, y + h - 0.62, w - 0.4, 0.55, label, size=8.5,
+          color=D_GRAY_DK, anchor=MSO_ANCHOR.TOP)
+
+
+def _qbr_cover(prs, brand):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    bg = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, SLIDE_W, SLIDE_H)
+    _fill(bg, D_NAVY_DK); _no_line(bg)
+    band = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, Inches(0.32), SLIDE_H)
+    _fill(band, D_TEAL); _no_line(band)
+    # faint teal block bottom-right for depth
+    blk = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(9.9), Inches(5.6), Inches(3.43), Inches(1.9))
+    _fill(blk, D_NAVY); _no_line(blk)
+    _wordmark(slide, MARGIN_L, 0.7, size=26, dark=False)
+    _text(slide, MARGIN_L, 2.75, 11, 0.4,
+          f"{brand['name'].upper()}  ·  {brand['period_tag']}",
+          size=13, bold=True, color=D_TEAL, tracking=3.0)
+    _text(slide, MARGIN_L, 3.25, 11.5, 1.3, "Quarterly SOC Services Report",
+          size=44, bold=True, color=BG_WHITE, font="Aptos Display")
+    _text(slide, MARGIN_L, 4.7, 10, 0.6, brand["period_label"],
+          size=20, color=D_TEAL_LT, tracking=2.0)
+    _hr(slide, MARGIN_L, 5.5, 3.0, color=D_TEAL, thickness=2.0)
+    _text(slide, MARGIN_L, 6.75, 10, 0.3, "CONFIDENTIAL · INTERNAL USE ONLY",
+          size=9, bold=True, color=D_GRAY, tracking=2.5)
+
+
+def _qbr_section(prs, brand, num, title, subtitle, tags, idx, total):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    bg = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, SLIDE_W, SLIDE_H)
+    _fill(bg, D_NAVY_DK); _no_line(bg)
+    band = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, Inches(0.32), SLIDE_H)
+    _fill(band, D_TEAL); _no_line(band)
+    _text(slide, MARGIN_L, 1.4, 6, 0.35, f"SECTION {idx:02d} / {total:02d}",
+          size=11, bold=True, color=D_TEAL, tracking=3.0)
+    _text(slide, MARGIN_L, 2.0, 6, 2.3, num, size=140, bold=True,
+          color=D_TEAL, font="Aptos Display")
+    _text(slide, 4.6, 2.7, 8.0, 1.0, title, size=40, bold=True,
+          color=BG_WHITE, font="Aptos Display")
+    _text(slide, 4.62, 3.85, 8.0, 0.9, subtitle, size=13, color=D_GRAY)
+    _text(slide, 4.62, 5.3, 8.0, 0.3, tags, size=9.5, bold=True,
+          color=D_TEAL_LT, tracking=2.0)
+    _qbr_footer(slide, brand, idx, dark=True)
+
+
+def _qbr_title(slide, title, subtitle):
+    _text(slide, MARGIN_L, 0.55, CONTENT_W, 0.7, title, size=26, bold=True,
+          color=D_NAVY, font="Aptos Display")
+    if subtitle:
+        _text(slide, MARGIN_L, 1.28, CONTENT_W, 0.5, subtitle, size=11, color=D_GRAY_DK)
+    _hr(slide, MARGIN_L, 1.75, CONTENT_W, color=D_TEAL, thickness=1.5)
+
+
+def _qbr_exec_overview(prs, brand, ex, soc, ti):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    bg = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, SLIDE_W, SLIDE_H)
+    _fill(bg, D_BG); _no_line(bg)
+    _qbr_title(slide, "Security Operations: Executive Overview",
+               "Quarterly performance, service reliability and detection outcomes for this tenant.")
+    s = (soc or {}).get("summary", {}) if soc else {}
+    ex = ex or {}
+    ti = ti or {}
+    tid_ok = ti.get("data_status") == "live"
+    col_w = (CONTENT_W - 0.75) / 4
+
+    def row(items, y):
+        for i, (big, lbl) in enumerate(items):
+            _qbr_tile(slide, MARGIN_L + i * (col_w + 0.25), y, col_w, 1.05, big, lbl)
+
+    _qbr_group(slide, MARGIN_L, 1.95, CONTENT_W, "Service Reliability")
+    row([
+        (_vs(s.get("sla_compliance_pct", ex.get("sla_compliance")), pct=True), "SLA compliance vs 95% target"),
+        (_vs(None), "service uptime"),
+        (_vs(s.get("mttd_minutes"), suffix=" min"), "MTTD · mean time to detect"),
+        (_vs(s.get("mttr_hours", ex.get("mttr_hours")), suffix=" h"), "MTTR · mean time to resolve"),
+    ], 2.35)
+
+    _qbr_group(slide, MARGIN_L, 3.65, CONTENT_W, "Quarterly Signal")
+    row([
+        (_vs(s.get("total_incidents", ex.get("incidents"))), "incidents handled (XSOAR)"),
+        (_vs(None), "offenses (QRadar)"),
+        (_vs(s.get("false_positive_rate", ex.get("false_positive_rate")), pct=True), "false-positive rate"),
+        (_vs(s.get("true_positive_rate"), pct=True), "true-positive rate"),
+    ], 4.05)
+
+    _qbr_group(slide, MARGIN_L, 5.35, CONTENT_W, "Coverage & Detection")
+    row([
+        (_vs(ex.get("detection_coverage"), pct=True), "MITRE ATT&CK coverage"),
+        (_vs(ex.get("automation_rate"), pct=True), "automation rate"),
+        (_vs(ti["summary"]["total_advisories"] if tid_ok else None), "threat advisories deployed"),
+        (_vs(ti["summary"].get("total_iocs") if tid_ok and "total_iocs" in ti.get("summary", {}) else None), "IOCs in security systems"),
+    ], 5.75)
+
+    _qbr_footer(slide, brand, 3)
+
+
+def _qbr_exec_performance(prs, brand, ex, soc, rules_count, qbr):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    bg = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, SLIDE_W, SLIDE_H)
+    _fill(bg, D_BG); _no_line(bg)
+    _qbr_title(slide, "Security Operations: Executive Performance View", None)
+    s = (soc or {}).get("summary", {}) if soc else {}
+    ex = ex or {}
+    sla = s.get("sla_compliance_pct", ex.get("sla_compliance"))
+    mttr = s.get("mttr_hours", ex.get("mttr_hours"))
+    live = bool(s) or ex.get("data_status") == "live"
+
+    # Headline update (teal band)
+    hb = _rect(slide, MARGIN_L, 2.0, CONTENT_W, 1.05, fill=D_TEAL, border=None, radius=0.05)
+    _text(slide, MARGIN_L + 0.3, 2.12, CONTENT_W - 0.6, 0.3, "HEADLINE UPDATE",
+          size=9, bold=True, color=BG_WHITE, tracking=2.5)
+    headline = (
+        f"Broader visibility is translating into faster, more resilient defense — "
+        f"SLA holding at {_vs(sla, pct=True)} with MTTR at {_vs(mttr, suffix='h')}."
+        if live else
+        "Upload XSOAR incident data to populate this tenant's executive performance view."
+    )
+    _text(slide, MARGIN_L + 0.3, 2.44, CONTENT_W - 0.6, 0.55, headline,
+          size=13, bold=True, color=BG_WHITE, font="Aptos Display")
+
+    # SOC SERVICES numbers row
+    _qbr_group(slide, MARGIN_L, 3.35, 7.0, "SOC Services")
+    col_w = (7.0 - 0.6) / 4
+    svc = [
+        (_vs(s.get("total_incidents", ex.get("incidents"))), "incidents escalated"),
+        (_vs(len((qbr or {}).get("log_sources") or []) or None), "log sources integrated"),
+        (_vs(rules_count), "use cases enabled"),
+        (_vs(None), "flow interfaces"),
+    ]
+    for i, (big, lbl) in enumerate(svc):
+        _qbr_tile(slide, MARGIN_L + i * (col_w + 0.2), 3.75, col_w, 1.05, big, lbl)
+
+    _qbr_group(slide, MARGIN_L, 5.05, 7.0, "Response & SLA")
+    col_w2 = (7.0 - 0.4) / 3
+    resp = [
+        (_vs(sla, pct=True), "incidents within SLA"),
+        (_vs(mttr, suffix=" h"), "mean time to resolve"),
+        (_vs(s.get("mttd_minutes"), suffix=" min"), "mean time to detect"),
+    ]
+    for i, (big, lbl) in enumerate(resp):
+        _qbr_tile(slide, MARGIN_L + i * (col_w2 + 0.2), 5.45, col_w2, 1.05, big, lbl)
+
+    # Right column: operating model bullets
+    bx = 8.5
+    _qbr_group(slide, bx, 3.35, CONTENT_W - (bx - MARGIN_L), "Operating Model")
+    bullets = [
+        "Continuous log-source reconciliation onboards new telemetry.",
+        "Regular use-case reviews and rule fine-tuning improve fidelity.",
+        "Threat advisories and IOCs strengthen emerging-attack defense.",
+        "Automation-driven triage compresses analyst handling time.",
+    ]
+    for i, b in enumerate(bullets):
+        _text(slide, bx, 3.8 + i * 0.62, 4.0, 0.6, "–  " + b, size=10, color=D_SLATE)
+
+    _qbr_footer(slide, brand, 4)
+
+
+def _qbr_log_sources(prs, brand, qbr):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    bg = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, SLIDE_W, SLIDE_H)
+    _fill(bg, D_BG); _no_line(bg)
+    ls = (qbr or {}).get("log_sources") or []
+    total = (qbr or {}).get("total", 0)
+    top = ls[0] if ls else None
+    title = (f"{top['name']} Drove {top['pct']}% of Incidents This Period"
+             if top else "Log Source Distribution")
+    _qbr_title(slide, title,
+               "Share of incidents by originating log source, ranked highest to lowest.")
+    if not ls:
+        _text(slide, MARGIN_L, 3.4, CONTENT_W, 0.5,
+              "N/A — no log-source field found in the uploaded incidents.",
+              size=13, color=D_GRAY_DK, align=PP_ALIGN.CENTER)
+        _qbr_footer(slide, brand, 6)
+        return
+    y0 = 2.15
+    row_h = min(0.5, (4.6) / len(ls))
+    label_w = 3.4
+    bar_x = MARGIN_L + label_w + 0.15
+    bar_w = CONTENT_W - label_w - 0.15
+    maxpct = max(x["pct"] for x in ls) or 1
+    for i, x in enumerate(ls):
+        yy = y0 + i * (row_h + 0.12)
+        _text(slide, MARGIN_L, yy, label_w, row_h, x["name"], size=10.5, bold=True,
+              color=D_SLATE, anchor=MSO_ANCHOR.MIDDLE)
+        _rect(slide, bar_x, yy + row_h * 0.15, bar_w, row_h * 0.7, fill=BG_WHITE,
+              border=(D_GRAY, 0.5), radius=0.4)
+        fillw = max(0.25, bar_w * (x["pct"] / maxpct))
+        _rect(slide, bar_x, yy + row_h * 0.15, fillw, row_h * 0.7,
+              fill=D_TEAL if i > 0 else D_NAVY, border=None, radius=0.4)
+        _text(slide, bar_x + bar_w - 2.0, yy, 1.95, row_h,
+              f"{x['pct']}%  ({x['count']}/{total})", size=9.5, bold=True,
+              color=D_SLATE, align=PP_ALIGN.RIGHT, anchor=MSO_ANCHOR.MIDDLE)
+    _qbr_footer(slide, brand, 6)
+
+
+def _qbr_alerts(prs, brand, qbr):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    bg = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, SLIDE_W, SLIDE_H)
+    _fill(bg, D_BG); _no_line(bg)
+    abm = (qbr or {}).get("alerts_by_month") or {}
+    months = abm.get("months") or []
+    _qbr_title(slide, "Alert Volume by Month; Severity Mix in Context",
+               "Monthly incident volume split by severity, with mean-time-to-resolve context.")
+    if not months:
+        _text(slide, MARGIN_L, 3.4, CONTENT_W, 0.5,
+              "N/A — no dated incidents to chart by month.",
+              size=13, color=D_GRAY_DK, align=PP_ALIGN.CENTER)
+        _qbr_footer(slide, brand, 7)
+        return
+    series = abm.get("series", {})
+    series_map = {k: series[k] for k in ("High", "Medium", "Low") if any(series.get(k, []))}
+    if series.get("Critical") and any(series["Critical"]):
+        series_map = {"Critical": series["Critical"], **series_map}
+    colors = [SEV_QBR.get(k, D_GRAY) for k in series_map.keys()]
+    _stacked_column(slide, MARGIN_L, 2.4, 8.0, 3.7,
+                    categories=months, series_map=series_map, colors=colors,
+                    title="Alerts by month · severity")
+    # Right callouts
+    cx = 9.0
+    _qbr_group(slide, cx, 2.05, CONTENT_W - (cx - MARGIN_L), "What drove the quarter")
+    totals = [(m, sum(series.get(s, [0] * len(months))[i] for s in series))
+              for i, m in enumerate(months)]
+    peak = max(totals, key=lambda t: t[1]) if totals else ("—", 0)
+    mttrm = (qbr or {}).get("mttr_by_month") or []
+    avg_mttr = round(sum(x["value"] for x in mttrm) / len(mttrm), 1) if mttrm else None
+    facts = [
+        (f"{peak[1]:,}", f"alerts in {peak[0]} — the period peak."),
+        (f"{(qbr or {}).get('total', 0):,}", "total incidents across the period."),
+        (_vs(avg_mttr, suffix=" h"), "average mean time to resolve."),
+    ]
+    for i, (big, lbl) in enumerate(facts):
+        yy = 2.5 + i * 1.25
+        _text(slide, cx, yy, 4.0, 0.5, big, size=26, bold=True, color=D_TEAL,
+              font="Aptos Display")
+        _text(slide, cx, yy + 0.5, 4.0, 0.6, lbl, size=10, color=D_SLATE)
+    _qbr_footer(slide, brand, 7)
+
+
+def _qbr_mitre(prs, brand, qbr):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    bg = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, SLIDE_W, SLIDE_H)
+    _fill(bg, D_BG); _no_line(bg)
+    tactics = (qbr or {}).get("tactics") or []
+    top = tactics[0] if tactics else None
+    title = (f"{top['tactic']} Led the Quarter" if top else "MITRE ATT&CK Tactic Activity")
+    _qbr_title(slide, title,
+               "Incident volume mapped to MITRE ATT&CK tactics for this tenant.")
+    if not tactics:
+        _text(slide, MARGIN_L, 3.4, CONTENT_W, 0.5,
+              "N/A — no MITRE tactic mapping in the uploaded incidents.",
+              size=13, color=D_GRAY_DK, align=PP_ALIGN.CENTER)
+        _qbr_footer(slide, brand, 8)
+        return
+    top8 = tactics[:8]
+    _bar_chart(slide, MARGIN_L, 2.35, 8.0, 3.8,
+               categories=[t["tactic"] for t in top8],
+               values=[t["count"] for t in top8],
+               accent=D_TEAL, title="Alerts by MITRE ATT&CK tactic")
+    cx = 9.0
+    _qbr_group(slide, cx, 2.05, CONTENT_W - (cx - MARGIN_L), "What shifted this quarter")
+    for i, t in enumerate(tactics[:3]):
+        yy = 2.5 + i * 1.25
+        _text(slide, cx, yy, 4.0, 0.5, f"{t['count']:,}", size=26, bold=True,
+              color=D_TEAL, font="Aptos Display")
+        _text(slide, cx, yy + 0.5, 4.0, 0.6, f"{t['tactic']} alerts this period.",
+              size=10, color=D_SLATE)
+    _qbr_footer(slide, brand, 8)
+
+
+def _qbr_closing(prs, brand):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    bg = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, SLIDE_W, SLIDE_H)
+    _fill(bg, D_NAVY_DK); _no_line(bg)
+    band = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, Inches(0.32), SLIDE_H)
+    _fill(band, D_TEAL); _no_line(band)
+    _wordmark(slide, MARGIN_L, 0.8, size=24, dark=False)
+    _text(slide, MARGIN_L, 3.0, 11, 0.9, "Thank you.", size=44, bold=True,
+          color=BG_WHITE, font="Aptos Display")
+    _text(slide, MARGIN_L, 4.1, 11, 0.5,
+          f"Prepared for {brand['name']} · {brand['period_label']}",
+          size=13, color=D_TEAL_LT)
+    _text(slide, MARGIN_L, 6.4, 11.5, 0.9,
+          "This report is intended solely for the internal use of the named client. "
+          "It is confidential and may not be distributed without prior written consent.",
+          size=8.5, color=D_GRAY)
+
+
+# ================================================================
 #  Entry point
 # ================================================================
+
+def _period_labels(period: str):
+    """Human labels for the cover/footer from the app's period."""
+    now = datetime.now(timezone.utc)
+    p = (period or "monthly").lower()
+    q = (now.month - 1) // 3 + 1
+    tag = {"weekly": f"WK {now.isocalendar()[1]} {now.year}",
+           "monthly": now.strftime("%b %Y").upper(),
+           "quarterly": f"Q{q} {now.year}"}.get(p, p.upper())
+    label = {"weekly": now.strftime("WEEK OF %d %B %Y").upper(),
+             "monthly": now.strftime("%B %Y").upper(),
+             "quarterly": f"Q{q} {now.year}"}.get(p, now.strftime("%B %Y").upper())
+    return tag, label
+
 
 def build_pptx(tenant: dict, period: str, all_data: dict,
                recommendations: list) -> io.BytesIO:
@@ -1365,27 +1745,34 @@ def build_pptx(tenant: dict, period: str, all_data: dict,
     prs.slide_width = SLIDE_W
     prs.slide_height = SLIDE_H
 
+    tag, label = _period_labels(period)
     brand = {
         "name": tenant.get("name", "MSSP Client") if tenant else "MSSP Client",
         "domain": tenant.get("domain", "ALL") if tenant else "ALL",
-        "primary": tenant.get("primary_color") if tenant else "#1E3A8A",
+        "primary": tenant.get("primary_color") if tenant else "#00ABAB",
+        "period_tag": tag,
+        "period_label": label,
     }
 
-    _slide_cover(prs, brand, period)
-    _slide_agenda(prs, brand)
-    _slide_exec_summary(prs, brand, all_data["executive"], recommendations)
-    _slide_posture(prs, brand, all_data["executive"])
-    _slide_incidents(prs, brand, all_data["soc_manager"], all_data["executive"])
-    _slide_speed(prs, brand, all_data["soc_manager"])
-    _slide_threats(prs, brand, all_data["threat_intel"], all_data["client"])
-    _slide_detection(prs, brand, all_data["detection"])
-    _slide_automation(prs, brand, all_data["soar"])
-    _slide_client_impact(prs, brand, all_data["client"])
-    _slide_ai_recommendations(prs, brand, recommendations)
-    _slide_next_steps(prs, brand, recommendations)
-    _slide_appendix_divider(prs, brand)
-    _slide_data_snapshot(prs, brand, all_data["threat_intel"], all_data["soar"])
-    _slide_thankyou(prs, brand)
+    ex = all_data.get("executive", {})
+    soc = all_data.get("soc_live")
+    ti = all_data.get("ti_live")
+    qbr = all_data.get("qbr", {})
+    rules_count = all_data.get("rules_count")
+
+    _qbr_cover(prs, brand)
+    _qbr_section(prs, brand, "01", "Executive Summary",
+                 "Quarterly performance, service reliability, and detection outcomes.",
+                 "SERVICE RELIABILITY   •   SIGNAL   •   COVERAGE & DETECTION", 1, 2)
+    _qbr_exec_overview(prs, brand, ex, soc, ti)
+    _qbr_exec_performance(prs, brand, ex, soc, rules_count, qbr)
+    _qbr_section(prs, brand, "02", "Incident Monitoring",
+                 "From log-source concentration to incident trends and MITRE ATT&CK.",
+                 "LOG SOURCES   •   INCIDENT TRENDS   •   MITRE ATT&CK", 2, 2)
+    _qbr_log_sources(prs, brand, qbr)
+    _qbr_alerts(prs, brand, qbr)
+    _qbr_mitre(prs, brand, qbr)
+    _qbr_closing(prs, brand)
 
     buf = io.BytesIO()
     prs.save(buf)
