@@ -267,6 +267,27 @@ def _pct(num: int, den: int) -> float:
     return round(100.0 * num / den, 1)
 
 
+# Close-reason classification — robust to real-world XSOAR label variants.
+_FP_TOKENS = ("false positive", "false-positive", "falsepositive",
+              "benign", "not malicious", "no threat", "non-malicious")
+_TP_TOKENS = ("true positive", "true-positive", "truepositive",
+              "malicious", "confirmed")
+
+
+def _is_fp(reason) -> bool:
+    r = (reason or "").strip().lower()
+    if not r:
+        return False
+    return r in {"fp"} or any(t in r for t in _FP_TOKENS)
+
+
+def _is_tp(reason) -> bool:
+    r = (reason or "").strip().lower()
+    if not r:
+        return False
+    return r in {"tp"} or any(t in r for t in _TP_TOKENS)
+
+
 def _time_bins(dates: List[str], bucket: str = "day") -> List[Tuple[str, int]]:
     """Return list of (label, count) sorted by label."""
     c: Counter = Counter()
@@ -298,8 +319,8 @@ async def compute_soc_manager(db, tenant_id: str) -> Dict[str, Any]:
     total = len(rows)
     closed = [r for r in rows if r.get("status") and r["status"].lower() == "closed"]
     open_now = total - len(closed)
-    fp = sum(1 for r in rows if (r.get("close_reason") or "").lower() == "false positive")
-    tp = sum(1 for r in rows if r.get("close_reason") and "true" in r["close_reason"].lower())
+    fp = sum(1 for r in rows if _is_fp(r.get("close_reason")))
+    tp = sum(1 for r in rows if _is_tp(r.get("close_reason")))
     sla_breached = sum(1 for r in rows if r.get("sla_breached") is True)
 
     # MTTR/MTTD/MTTA use the median (robust) — the arithmetic mean is skewed
@@ -341,7 +362,7 @@ async def compute_soc_manager(db, tenant_id: str) -> Dict[str, Any]:
         if not rn: continue
         s = rule_fp_stats.setdefault(rn, {"total": 0, "fp": 0})
         s["total"] += 1
-        if (r.get("close_reason") or "").lower() == "false positive":
+        if _is_fp(r.get("close_reason")):
             s["fp"] += 1
     noisy_rules = sorted(
         [{"rule": k[:80], "total": v["total"], "fp": v["fp"], "fp_pct": _pct(v["fp"], v["total"])}
@@ -509,7 +530,7 @@ async def compute_executive_rollup(db, tenant_id: str) -> Dict[str, Any]:
 
     total = len(rows)
     closed = [r for r in rows if (r.get("status") or "").lower() == "closed"]
-    fp = sum(1 for r in rows if (r.get("close_reason") or "").lower() == "false positive")
+    fp = sum(1 for r in rows if _is_fp(r.get("close_reason")))
     sla_breached = sum(1 for r in rows if r.get("sla_breached") is True)
     auto_closed = sum(1 for r in rows if r.get("auto_close") is True)
 
@@ -608,10 +629,10 @@ async def compute_detection_overlay(db, tenant_id: str) -> Dict[str, Any]:
             continue
         s = rule_stats.setdefault(rn, {"total": 0, "fp": 0, "tp": 0})
         s["total"] += 1
-        cr = (r.get("close_reason") or "").lower()
-        if cr == "false positive":
+        cr = r.get("close_reason")
+        if _is_fp(cr):
             s["fp"] += 1
-        elif "true" in cr or "resolved" in cr or "mitigated" in cr:
+        elif _is_tp(cr):
             s["tp"] += 1
 
     rules: List[Dict[str, Any]] = []
@@ -660,7 +681,7 @@ async def compute_client(db, tenant_id: str) -> Dict[str, Any]:
 
     total = len(rows)
     closed = [r for r in rows if (r.get("status") or "").lower() == "closed"]
-    fp = sum(1 for r in rows if (r.get("close_reason") or "").lower() == "false positive")
+    fp = sum(1 for r in rows if _is_fp(r.get("close_reason")))
     sla_breached = sum(1 for r in rows if r.get("sla_breached") is True)
     major = sum(1 for r in rows if _severity_norm(r.get("severity")) in ("Critical", "High"))
     open_critical = sum(1 for r in rows if (r.get("status") or "").lower() != "closed"
@@ -693,7 +714,7 @@ async def compute_client(db, tenant_id: str) -> Dict[str, Any]:
             s["ok"] += 1
         if r.get("auto_close") is True:
             s["auto"] += 1
-        if (r.get("close_reason") or "").lower() == "false positive":
+        if _is_fp(r.get("close_reason")):
             s["fp"] += 1
     days = sorted(by_day.keys())[-30:]
     sla_trend = [{"date": d, "value": _pct(by_day[d]["ok"], by_day[d]["total"])} for d in days]
